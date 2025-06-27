@@ -27,6 +27,12 @@ const health = ref(0)
 const maxHealth = 100
 const healthPercentage = ref(0)
 
+// Movement system
+let cigaretteVelocity = new THREE.Vector3(0.02, 0.01, 0)
+let cigarettePosition = new THREE.Vector3(0, 0, 0)
+let movementBounds = { x: 2, y: 1.5, z: 0 }
+let isMoving = true
+
 const init = () => {
   if (!container.value) return
 
@@ -80,7 +86,7 @@ const createCigarette = () => {
   cigarette = new THREE.Group()
 
   // Cigarette body (white paper) - made wider
-  const bodyGeometry = new THREE.CylinderGeometry(0.08, 0.08, 2, 8)
+  const bodyGeometry = new THREE.CylinderGeometry(0.12, 0.12, 2, 8)
   const bodyMaterial = new THREE.MeshLambertMaterial({
     color: 0xf5f5f5,
     transparent: true,
@@ -92,7 +98,7 @@ const createCigarette = () => {
   cigarette.add(body)
 
   // Filter (orange/brown) - made wider to match body
-  const filterGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.3, 8)
+  const filterGeometry = new THREE.CylinderGeometry(0.12, 0.12, 0.3, 8)
   const filterMaterial = new THREE.MeshLambertMaterial({
     color: 0xd2691e,
     transparent: true,
@@ -240,12 +246,35 @@ const handleClick = (event: MouseEvent) => {
     health.value = Math.min(health.value + damage, maxHealth)
     healthPercentage.value = (health.value / maxHealth) * 100
 
+    // Change cigarette direction when hit
+    changeCigaretteDirection()
+
     // Add screen shake effect
     addScreenShake()
 
     // Add cigarette recoil effect
     addCigaretteRecoil()
   }
+}
+
+const changeCigaretteDirection = () => {
+  // Randomly change velocity direction
+  const speed = cigaretteVelocity.length()
+  const angle = Math.random() * Math.PI * 2
+
+  cigaretteVelocity.x = Math.cos(angle) * speed * (0.8 + Math.random() * 0.4) // Vary speed slightly
+  cigaretteVelocity.y = Math.sin(angle) * speed * (0.8 + Math.random() * 0.4)
+
+  // Occasionally add some z movement for more unpredictability
+  if (Math.random() < 0.3) {
+    cigaretteVelocity.z = (Math.random() - 0.5) * 0.01
+  } else {
+    cigaretteVelocity.z = 0
+  }
+
+  // Increase speed slightly as health increases (gets harder)
+  const speedMultiplier = 1 + (health.value / maxHealth) * 0.5
+  cigaretteVelocity.multiplyScalar(speedMultiplier)
 }
 
 const addScreenShake = () => {
@@ -295,11 +324,35 @@ const addCigaretteRecoil = () => {
 const animate = () => {
   animationId = requestAnimationFrame(animate)
 
-  if (cigarette) {
-    // Gentle floating animation
+  if (cigarette && isMoving) {
+    // Update position based on velocity
+    cigarettePosition.add(cigaretteVelocity)
+
+    // Bounce off boundaries
+    if (Math.abs(cigarettePosition.x) > movementBounds.x) {
+      cigaretteVelocity.x *= -1
+      cigarettePosition.x = Math.sign(cigarettePosition.x) * movementBounds.x
+    }
+
+    if (Math.abs(cigarettePosition.y) > movementBounds.y) {
+      cigaretteVelocity.y *= -1
+      cigarettePosition.y = Math.sign(cigarettePosition.y) * movementBounds.y
+    }
+
+    if (Math.abs(cigarettePosition.z) > movementBounds.z) {
+      cigaretteVelocity.z *= -1
+      cigarettePosition.z = Math.sign(cigarettePosition.z) * movementBounds.z
+    }
+
+    // Apply position to cigarette
+    cigarette.position.copy(cigarettePosition)
+
+    // Gentle rotation
     cigarette.rotation.y += 0.005
-    cigarette.position.y = Math.sin(Date.now() * 0.001) * 0.1
-    cigarette.position.x = Math.sin(Date.now() * 0.0005) * 0.05
+
+    // Add slight wobble based on movement
+    cigarette.rotation.x = Math.sin(Date.now() * 0.002) * 0.1
+    cigarette.rotation.z = Math.cos(Date.now() * 0.003) * 0.05
   }
 
   renderer.render(scene, camera)
